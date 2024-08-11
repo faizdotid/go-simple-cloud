@@ -1,0 +1,52 @@
+services:
+  db:
+    container_name: go-simple-cloud-db
+    image: mariadb:10.5
+    restart: always
+    secrets:
+      - db_password
+    environment:
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/db_password
+      - MARIADB_DATABASE=go_simple_cloud
+      - MARIADB_USER=go_simple_cloud
+      - MARIADB_PASSWORD_FILE=/run/secrets/db_password
+    volumes:
+      - "./assets/sql/init.sql:/docker-entrypoint-initdb.d/init.sql"
+    ports:
+      - "3306:3306"
+    expose:
+      - "3306"
+    networks:
+      - go-simple-cloud-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  
+  server:
+    container_name: go-simple-cloud
+    build:
+      target: runtime
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    expose:
+      - "8080"
+    depends_on:
+      - db
+    networks:
+      - go-simple-cloud-network
+    
+  
+
+secrets:
+  db_password:
+    file: assets/secrets/password.txt
+
+networks:
+  go-simple-cloud-network:
+    driver: bridge
