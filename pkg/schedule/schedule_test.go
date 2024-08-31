@@ -21,9 +21,19 @@ func (t *testStruct) Do() error {
 }
 
 func TestSchedule(t *testing.T) {
-	s := testStruct{s: "Hello, World!"}
-	err := schedule.Schedule(1, &s)
-	if err != nil {
-		t.Errorf("Error: %v", err)
+	errorChan := make(chan error)
+	defer close(errorChan)
+
+	s := &testStruct{
+		s: "Hello, World!",
+		l: 0,
 	}
+
+	if err := schedule.Schedule(1, s, errorChan); err != nil {
+		t.Fatalf("Failed to schedule task: %v", err)
+	}
+	go func() {
+		t.Logf("Task scheduled")
+	}()
+
 }

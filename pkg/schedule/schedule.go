@@ -2,34 +2,30 @@ package schedule
 
 import (
 	"errors"
+	"log"
+	"reflect"
+	"strings"
 	"time"
 )
 
-func Schedule(d time.Duration, i ScheduleInterface) error {
+func getStructName(i interface{}) string {
+	return strings.TrimPrefix(reflect.TypeOf(i).String(), "*")
+}
+
+// Schedule schedules tasks to run every specified duration (in minutes).
+func Schedule(d time.Duration, i ScheduleInterface, errorChan chan<- error) error {
 	if d <= 0 {
 		return errors.New("invalid duration, must be greater than 0")
 	}
-
-	ticker := time.NewTicker(d * time.Second)
-	defer ticker.Stop()
-
-	errChan := make(chan error, 1)
-	doneChan := make(chan bool, 1)
+	ticker := time.NewTicker(d * time.Minute) // Changed from Second to Minute
+	log.Printf("[Schedule] Scheduled task [%s] to run every %d minutes", getStructName(i), int(d.Minutes()))
 	go func() {
-		for {
-			select {
-			case <-doneChan:
-				return
-			case <-ticker.C:
-				err := i.Do()
-				if err != nil {
-					errChan <- err
-					doneChan <- true
-					return
-				}
+		for range ticker.C {
+			log.Printf("[Schedule] Running task [%s]", getStructName(i))
+			if err := i.Do(); err != nil {
+				errorChan <- err
 			}
 		}
 	}()
-
-	return <-errChan
+	return nil
 }
