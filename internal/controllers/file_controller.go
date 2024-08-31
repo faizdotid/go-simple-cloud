@@ -7,6 +7,8 @@ import (
 	"go-simple-cloud/internal/services"
 	"go-simple-cloud/internal/utils"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +54,14 @@ func (u *fileController) Upload(c *gin.Context) {
 		Path:      response["file"].(map[string]interface{})["path"].(string),
 		ExpiresAt: time.Unix(expiresAt, 0),
 	}
+	fileRecordExt := strings.TrimPrefix(path.Ext(fileRecord.Filename), ".")
 
+	var previewFile model.PreviewFiles
+	if err := u.db.Model(&model.PreviewFiles{}).Where("name = ?", fileRecordExt).First(&previewFile).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	fileRecord.PreviewFileID = previewFile.ID
 	if err := u.db.Create(&fileRecord).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -60,6 +69,10 @@ func (u *fileController) Upload(c *gin.Context) {
 
 	fileData := u.filesAsMap(&fileRecord)
 	fileData["url"] = url
+	fileData["preview"] = map[string]interface{}{
+		"name": previewFile.Name,
+		"url":  previewFile.Url,
+	}
 
 	c.JSON(http.StatusOK, gin.H{"file": fileData})
 }
@@ -67,7 +80,7 @@ func (u *fileController) Upload(c *gin.Context) {
 // Index lists recent files that have not expired
 func (u *fileController) Index(c *gin.Context) {
 	var files []model.Files
-	if err := u.db.Where("expires_at > ?", time.Now()).Order("created_at DESC").Limit(10).Find(&files).Error; err != nil {
+	if err := u.db.Preload("PreviewFile").Where("expires_at > ?", time.Now()).Order("created_at DESC").Limit(10).Find(&files).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -85,7 +98,7 @@ func (u *fileController) Index(c *gin.Context) {
 func (u *fileController) Show(c *gin.Context) {
 	url := c.Param("url")
 	var file model.Files
-	if err := u.db.Where("url = ? AND expires_at > ?", url, time.Now()).First(&file).Error; err == gorm.ErrRecordNotFound {
+	if err := u.db.Preload("PreviewFile").Where("url = ? AND expires_at > ?", url, time.Now()).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
@@ -113,5 +126,9 @@ func (u *fileController) filesAsMap(file *model.Files) map[string]interface{} {
 		"filename":   file.Filename,
 		"filesize":   file.Filesize,
 		"expires_at": file.ExpiresAt.Format(time.RFC3339),
+		"preview": map[string]interface{}{
+			"name": file.PreviewFile.Name,
+			"url":  file.PreviewFile.Url,
+		},
 	}
 }
