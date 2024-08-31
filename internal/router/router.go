@@ -2,17 +2,12 @@ package router
 
 import (
 	"go-simple-cloud/internal/controllers"
-	"go-simple-cloud/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func NewRoute() *gin.Engine {
-
-	dbService, err := services.NewDatabaseService()
-	if err != nil {
-		panic(err)
-	}
+func NewRoute(db *gorm.DB) *gin.Engine {
 
 	r := gin.Default(func(e *gin.Engine) {
 		e.Use(gin.Logger())
@@ -24,10 +19,11 @@ func NewRoute() *gin.Engine {
 		})
 	})
 	r.StaticFile("/", "web/index.html")
+	r.Static("/assets/static", "assets/static")
 
 	apiGroup := r.Group("/api/v1") // new api group
 
-	fileController := controllers.NewFileController(dbService)
+	fileController := controllers.NewFileController(db)
 	apiGroup.GET("/", controllers.IndexController)
 	apiGroup.POST("/files", fileController.Upload)
 	apiGroup.GET("/files", fileController.Index)
