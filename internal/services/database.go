@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -16,5 +17,6 @@ func NewDatabaseService() (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("[DatabaseService] Database connection established")
 	return db, nil
 }

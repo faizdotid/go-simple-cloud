@@ -2,8 +2,13 @@ package services
 
 import (
 	"errors"
+	"gorm.io/gorm"
 	"os"
 )
+
+type CleanupUploadsService struct {
+	db *gorm.DB
+}
 
 var (
 	UploadsPath    = "assets/uploads"
