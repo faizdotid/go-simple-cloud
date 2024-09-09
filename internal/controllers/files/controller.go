@@ -1,4 +1,4 @@
-package controllers
+package files
 
 import (
 	"fmt"
@@ -8,19 +8,16 @@ import (
 	"go-simple-cloud/internal/utils"
 	"net/http"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// NewFileController initializes a new file controller with a given database
 func NewFileController(db *gorm.DB) *fileController {
 	return &fileController{db: db}
 }
 
-// Upload handles file uploads
 func (u *fileController) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -28,15 +25,15 @@ func (u *fileController) Upload(c *gin.Context) {
 		return
 	}
 
-	expirationStr := c.PostForm("expires")
-	if expirationStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Expiration time is required"})
+	expiresIn := c.PostForm("expires_in")
+	if expiresIn == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expiration time is required"})
 		return
 	}
 
-	expiresAt := helpers.CreateExpirationTime(helpers.Expiration(expirationStr))
-	if expiresAt == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expiration time"})
+	expiresAt, err := helpers.CreateExpirationTime(helpers.Expiration(expiresIn))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -47,27 +44,41 @@ func (u *fileController) Upload(c *gin.Context) {
 	}
 
 	url := utils.CreateRandomString()
-	fileRecord := model.Files{
+	record := model.Files{
 		Filename:  file.Filename,
 		Url:       url,
 		Filesize:  file.Size,
 		Path:      response["file"].(map[string]interface{})["path"].(string),
 		ExpiresAt: time.Unix(expiresAt, 0),
 	}
-	fileRecordExt := strings.TrimPrefix(path.Ext(fileRecord.Filename), ".")
+	fileExt := path.Ext(file.Filename)
 
 	var previewFile model.PreviewFiles
-	if err := u.db.Model(&model.PreviewFiles{}).Where("name = ?", fileRecordExt).First(&previewFile).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	fileRecord.PreviewFileID = previewFile.ID
-	if err := u.db.Create(&fileRecord).Error; err != nil {
+
+	// SELECT `preview_files`.`id` FROM `preview_files` JOIN `file_extensions` ON `preview_files`.`ext_id` = `file_extensions`.`id` WHERE ext = ?
+	err = u.db.Model(&model.PreviewFiles{}).
+		Joins("JOIN file_extensions ON preview_files.ext_id = file_extensions.id").
+		Where("file_extensions.ext = ?", fileExt).
+		First(&previewFile).Error
+
+	if err == gorm.ErrRecordNotFound {
+		if err := u.db.Find(&model.PreviewFiles{}).Where("id = 0").First(&previewFile).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	fileData := u.filesAsMap(&fileRecord)
+	record.PreviewFileID = previewFile.ID
+	if err := u.db.Create(&record).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileData := u.filesAsMap(&record)
 	fileData["url"] = url
 	fileData["preview"] = map[string]interface{}{
 		"name": previewFile.Name,
