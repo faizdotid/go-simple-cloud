@@ -2,6 +2,7 @@ package router
 
 import (
 	"go-simple-cloud/internal/controllers"
+	"go-simple-cloud/internal/controllers/files"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,7 +24,7 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 
 	apiGroup := r.Group("/api/v1") // new api group
 
-	fileController := controllers.NewFileController(db)
+	fileController := files.NewFileController(db)
 	apiGroup.GET("/", controllers.IndexController)
 	apiGroup.POST("/files", fileController.Upload)
 	apiGroup.GET("/files", fileController.Index)
